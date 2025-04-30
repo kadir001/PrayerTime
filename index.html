@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Gebedstijden App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2em;
+      background: #f2f2f2;
+      text-align: center;
+    }
+    h1 {
+      color: #2e7d32;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      background: white;
+      margin: 10px auto;
+      padding: 10px;
+      max-width: 300px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #afteller {
+      font-size: 1.5em;
+      margin-top: 1em;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <h1>🕌 Gebedstijden Vandaag</h1>
+  <p id="hijriDatum">📅 Islamitische datum laden...</p>
+  <p id="locatie">Locatie ophalen...</p>
+  <ul id="tijden"></ul>
+  <p id="afteller">⏳ Wachten op volgende gebed...</p>
+
+  <script>
+    let timerInterval;
+
+    function formatTime(tijd) {
+      return tijd.split(":").map(t => t.padStart(2, '0')).join(":");
+    }
+
+    function updateTimer(nextPrayerTime) {
+      clearInterval(timerInterval);
+      function countdown() {
+        const now = new Date();
+        const target = new Date(now.toDateString() + ' ' + nextPrayerTime);
+        if (target < now) target.setDate(target.getDate() + 1); // als tijd al voorbij is
+
+        const diff = target - now;
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+        const seconds = Math.floor((diff / 1000) % 60);
+
+        document.getElementById('afteller').textContent =
+          `⏳ Volgende gebed in ${hours}u ${minutes}m ${seconds}s`;
+
+        if (diff <= 0) clearInterval(timerInterval);
+      }
+      countdown();
+      timerInterval = setInterval(countdown, 1000);
+    }
+
+    function haalGebedstijdenOp(lat, lon) {
+      const apiUrl = `https://api.aladhan.com/v1/timings?latitude=${lat}&longitude=${lon}&method=4`;
+
+      fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+          const timings = data.data.timings;
+          const hijri = data.data.date.hijri;
+
+          document.getElementById('hijriDatum').textContent =
+            `📅 Islamitische datum: ${hijri.weekday.en}, ${hijri.day} ${hijri.month.en} ${hijri.year}`;
+
+          document.getElementById('locatie').textContent = `Gebedstijden vandaag`;
+
+          const lijst = document.getElementById('tijden');
+          lijst.innerHTML = '';
+
+          const hoofdGebeden = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+          let eerstvolgende = null;
+
+          hoofdGebeden.forEach(gebed => {
+            const tijd = formatTime(timings[gebed]);
+            const li = document.createElement('li');
+            li.textContent = `${gebed}: ${tijd}`;
+            lijst.appendChild(li);
+
+            // Bepaal eerstvolgende gebed
+            const nu = new Date();
+            const gebedTijd = new Date(nu.toDateString() + ' ' + tijd);
+            if (!eerstvolgende && gebedTijd > nu) {
+              eerstvolgende = tijd;
+            }
+          });
+
+          if (eerstvolgende) {
+            updateTimer(eerstvolgende);
+          } else {
+            document.getElementById('afteller').textContent = '🌙 Alle gebeden voor vandaag zijn voorbij.';
+          }
+        })
+        .catch(err => {
+          document.getElementById('locatie').textContent = '❌ Fout bij ophalen tijden.';
+          console.error(err);
+        });
+    }
+
+    // Vraag locatie van gebruiker
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        haalGebedstijdenOp(lat, lon);
+      }, err => {
+        document.getElementById('locatie').textContent = '❌ Toegang tot locatie geweigerd.';
+      });
+    } else {
+      document.getElementById('locatie').textContent = '❌ Geolocatie niet ondersteund.';
+    }
+  </script>
+</body>
+</html>
